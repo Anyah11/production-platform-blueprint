@@ -75,6 +75,17 @@ Automated pipeline execution performing Go tests, multi-stage image packaging, A
 
 ![GitHub Actions Success](docs/screenshots/github-actions-success.png)
 
+### 4. Synthetic Fault Injection & Alert Evaluation
+To validate incident detection mechanisms without waiting for organic production failures, the application exposes a `/fault` endpoint that returns HTTP 500 and increments `http_requests_total{status="500"}`:
+
+1. **Traffic Injection:** Generated a burst of synthetic 5xx requests to breach the 5% error threshold:
+   ```bash
+   for i in {1..100}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/fault; sleep 0.1; done
+   ```
+2. **Prometheus Alerting State Transition:** Prometheus evaluated the PromQL error-ratio expression, transitioning `DemoApiHighErrorRate` from `Inactive` to `Pending` and finally to `Firing` once the error condition persisted past the 1-minute evaluation threshold:
+
+![Prometheus Alert Firing](docs/screenshots/prometheus-alert-firing.png)
+
 ---
 
 ## Project Structure
@@ -92,6 +103,7 @@ Automated pipeline execution performing Go tests, multi-stage image packaging, A
 │   └── screenshots/              # Portfolio proof-of-work captures
 │       ├── github-actions-success.png
 │       ├── grafana-http-rate.png
+│       ├── prometheus-alert-firing.png
 │       └── prometheus-targets-up.png
 ├── k8s/
 │   ├── deployment.yaml           # Deployment (2 replicas, probes) and ClusterIP Service
