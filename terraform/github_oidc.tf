@@ -21,11 +21,11 @@ resource "aws_iam_role" "github_actions_deployer" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "token.actions.githubusercontent.com:aud" : "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            # Restrict execution specifically to your repository's main branch
-            "token.actions.githubusercontent.com:sub" : "repo:Anyah11/production-platform-blueprint:ref:refs/heads/main"
+            # Matches any branch or action run in this specific repository
+            "token.actions.githubusercontent.com:sub" = "repo:Anyah11/production-platform-blueprint:*"
           }
         }
       }
