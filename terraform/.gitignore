@@ -1,0 +1,20 @@
+# Local .terraform directories and cache
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Plan files
+tfplan
+*tfplan*
+
+# Ignore variable files with potential secrets
+*.tfvars
+*.tfvars.json
+
+# OS-specific clutter
+.DS_Store
