@@ -1,0 +1,28 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-api-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    role: alert-rules
+spec:
+  groups:
+  - name: demo-api.rules
+    rules:
+    - alert: DemoApiHighErrorRate
+      expr: sum(rate(http_requests_total{status=~"5.."}[2m])) / sum(rate(http_requests_total[2m])) * 100 > 5
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High HTTP 5xx error rate detected on demo-api"
+        description: "Over 5% of requests to demo-api returned 5xx status codes over the last 2 minutes."
+    - alert: DemoApiPodNotReady
+      expr: kube_pod_status_ready{namespace="default", pod=~"demo-api-.*", condition="true"} == 0
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "demo-api pod is not ready"
+        description: "Pod {{ $labels.pod }} has been in an unready state for more than 2 minutes."
