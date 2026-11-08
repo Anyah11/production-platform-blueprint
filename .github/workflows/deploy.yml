@@ -1,0 +1,91 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'k8s/**'
+      - '.github/workflows/deploy.yml'
+
+permissions:
+  id-token: write   # Required for requesting the JWT OIDC token
+  contents: read    # Required for actions/checkout
+
+env:
+  AWS_REGION: us-east-1
+  ROLE_TO_ASSUME: arn:aws:iam::444301975580:role/github-actions-deployer-role
+  ECR_REPOSITORY: sre-demo-api
+  EKS_CLUSTER_NAME: platform-eks-cluster
+
+jobs:
+  test-and-build:
+    name: Test & Build Application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: app/go.sum
+
+      - name: Run Unit Tests & Build Check
+        working-directory: ./app
+        run: |
+          go vet ./...
+          CGO_ENABLED=0 GOOS=linux go build -o /dev/null main.go
+
+  deploy:
+    name: Build Image, Push to ECR & Rollout to EKS
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Docker Image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $REGISTRY/$ECR_REPOSITORY:latest ./app
+          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.31.0'
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Deploy to EKS
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Dynamically substitute git commit SHA image tag into deployment manifest
+          sed -i "s|444301975580.dkr.ecr.us-east-1.amazonaws.com/sre-demo-api:v1|$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" k8s/deployment.yaml
+          
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/servicemonitor.yaml
+          
+          # Block until rollout finishes successfully
+          kubectl rollout status deployment/demo-api --timeout=90s
