@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: app/go.sum
 
       - name: Run Unit Tests & Build Check
-        working-directory: ./app
+        working-directory: app
         run: |
           go vet ./...
           CGO_ENABLED=0 GOOS=linux go build -o /dev/null main.go
